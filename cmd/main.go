@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -52,7 +53,7 @@ func runMigrations() {
 	}
 
 	err = m.Up()
-	if err != nil && err != migrate.ErrNoChange {
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		log.Fatal(err)
 	}
 
