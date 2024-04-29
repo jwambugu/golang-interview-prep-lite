@@ -2,11 +2,14 @@ package user
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/util"
 	"net/http"
 )
 
 type Handler struct {
-	Svc service
+	Svc Service
 }
 
 func (h Handler) AddUser(w http.ResponseWriter, r *http.Request) {
@@ -15,21 +18,21 @@ func (h Handler) AddUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var u User
-	err := json.NewDecoder(r.Body).Decode(&u)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Invalid request body"))
+	var u *User
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+		util.JsonErrorResponse(w, http.StatusBadRequest, fmt.Errorf("parse body: %v", err))
 		return
 	}
-	// Call the AddUser function
-	message, err := h.Svc.AddUser(u)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to add user"))
+
+	if err := h.Svc.AddUser(u); err != nil {
+		if errors.Is(err, ErrUsernameExists) {
+			util.JsonErrorResponse(w, http.StatusUnprocessableEntity, err)
+			return
+		}
+
+		util.JsonErrorResponse(w, http.StatusInternalServerError, err)
+		return
 	}
 
-	// Return a success response
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(message))
+	util.JsonResponse(w, http.StatusCreated, u)
 }
