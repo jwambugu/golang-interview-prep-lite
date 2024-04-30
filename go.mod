@@ -3,6 +3,7 @@ module github.com/matthewjamesboyle/golang-interview-prep
 go 1.20
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang-migrate/migrate/v4 v4.16.1
 	github.com/jaswdr/faker v1.19.1
 	github.com/joho/godotenv v1.5.1

@@ -11,7 +11,8 @@ import (
 var Config *config
 
 type config struct {
-	DbDSN string
+	DbDSN     string
+	JwtSecret string
 }
 
 func absPath(filename string) string {
@@ -27,7 +28,8 @@ func Load(filename string) error {
 	}
 
 	Config = &config{
-		DbDSN: os.Getenv("DB_DSN"),
+		DbDSN:     os.Getenv("DB_DSN"),
+		JwtSecret: os.Getenv("JWT_SECRET"),
 	}
 
 	return nil

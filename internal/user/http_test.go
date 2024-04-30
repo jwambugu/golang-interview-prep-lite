@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/auth"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/config"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/db"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/model"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/testutil"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/user"
 	"github.com/stretchr/testify/require"
@@ -15,7 +17,8 @@ import (
 )
 
 type testSetup struct {
-	db *sql.DB
+	db         *sql.DB
+	jwtManager auth.JwtManager
 }
 
 func setupTest(t *testing.T) *testSetup {
@@ -25,11 +28,13 @@ func setupTest(t *testing.T) *testSetup {
 	conn, err := db.NewConnection(config.Config.DbDSN)
 	require.NoError(t, err)
 
-	return &testSetup{db: conn}
+	return &testSetup{
+		db:         conn,
+		jwtManager: auth.NewJwtTokenManager("secret"),
+	}
 }
 
 func TestHandler_AddUser_Success(t *testing.T) {
-
 	payload := testutil.NewUser()
 
 	reqBody, err := json.Marshal(payload)
@@ -38,17 +43,21 @@ func TestHandler_AddUser_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/user", bytes.NewBuffer(reqBody))
 	rr := httptest.NewRecorder()
 
-	setup := setupTest(t)
+	var (
+		setup    = setupTest(t)
+		userRepo = user.NewRepo(setup.db)
+	)
 
-	svc, err := user.NewService(setup.db)
+	svc, err := user.NewService(setup.jwtManager, userRepo)
 	require.NoError(t, err)
 
-	mux := user.Routes(svc)
+	mux := http.NewServeMux()
+	user.Routes(mux, svc)
 	mux.ServeHTTP(rr, req)
 
 	require.Equal(t, http.StatusCreated, rr.Code)
 
-	var resp user.User
+	var resp model.User
 	err = json.NewDecoder(rr.Body).Decode(&resp)
 
 	require.NoError(t, err)
@@ -71,11 +80,13 @@ func TestHandler_AddUser_BadRequest_MethodNotAllowed(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	setup := setupTest(t)
+	userRepo := user.NewRepo(setup.db)
 
-	svc, err := user.NewService(setup.db)
+	svc, err := user.NewService(setup.jwtManager, userRepo)
 	require.NoError(t, err)
 
-	mux := user.Routes(svc)
+	mux := http.NewServeMux()
+	user.Routes(mux, svc)
 	mux.ServeHTTP(rr, req)
 
 	require.Equal(t, http.StatusBadRequest, rr.Code)

@@ -2,11 +2,14 @@ package util
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
 )
+
+var ErrPasswordMismatch = errors.New("passwords don't match")
 
 func HashString(s string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(s), bcrypt.DefaultCost)
@@ -18,7 +21,11 @@ func HashString(s string) (string, error) {
 }
 
 func CompareHashAndPassword(hashedPassword, password string) error {
-	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+	if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password)); err != nil {
+		return ErrPasswordMismatch
+	}
+
+	return nil
 }
 
 func JsonErrorResponse(w http.ResponseWriter, statusCode int, err error) {
@@ -44,7 +51,7 @@ func JsonResponse(w http.ResponseWriter, statusCode int, data any) {
 		return
 	}
 
-	w.WriteHeader(statusCode)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
 	_, _ = w.Write(payload)
 }

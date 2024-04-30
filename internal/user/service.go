@@ -1,43 +1,43 @@
 package user
 
 import (
-	"database/sql"
-	"errors"
+	"context"
 	"fmt"
 	_ "github.com/lib/pq"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/auth"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/model"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/util"
+	"time"
 )
 
-var ErrUsernameExists = errors.New("username exists")
-
-type Service struct {
-	db *sql.DB
+type Service interface {
+	Authenticate(ctx context.Context, username string, password string) (*AuthenticateResp, error)
+	Create(ctx context.Context, u *model.User) error
 }
 
-func NewService(db *sql.DB) (*Service, error) {
-	return &Service{
-		db: db,
+type service struct {
+	jwtManager auth.JwtManager
+	repo       Repo
+}
+
+func (s *service) Authenticate(ctx context.Context, username string, password string) (*AuthenticateResp, error) {
+	user, err := s.repo.Authenticate(ctx, username, password)
+	if err != nil {
+		return nil, err
+	}
+
+	accessToken, err := s.jwtManager.Generate(time.Hour, user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthenticateResp{
+		AccessToken: accessToken,
+		User:        user,
 	}, nil
 }
 
-type User struct {
-	ID       string `json:"id,omitempty"`
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
-}
-
-func (s *Service) AddUser(u *User) error {
-	usernameExists := `SELECT exists(SELECT 1 FROM users WHERE username = $1)`
-
-	var exists bool
-	if err := s.db.QueryRow(usernameExists, u.Username).Scan(&exists); err != nil {
-		return fmt.Errorf("username exists: %v", err)
-	}
-
-	if exists {
-		return ErrUsernameExists
-	}
-
+func (s *service) Create(ctx context.Context, u *model.User) error {
 	hashedPassword, err := util.HashString(u.Password)
 	if err != nil {
 		return fmt.Errorf("hash password: %v", err)
@@ -45,11 +45,16 @@ func (s *Service) AddUser(u *User) error {
 
 	u.Password = hashedPassword
 
-	q := `INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id;`
-
-	if err = s.db.QueryRow(q, u.Username, u.Password).Scan(&u.ID); err != nil {
-		return fmt.Errorf("insert user: %w", err)
+	if err = s.repo.Create(ctx, u); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func NewService(jwtManager auth.JwtManager, repo Repo) (Service, error) {
+	return &service{
+		jwtManager: jwtManager,
+		repo:       repo,
+	}, nil
 }

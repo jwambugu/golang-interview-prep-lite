@@ -2,13 +2,11 @@ package user
 
 import "net/http"
 
-func Routes(svc *Service) *http.ServeMux {
+func Routes(mux *http.ServeMux, svc Service) {
 	var (
-		mux     = http.NewServeMux()
-		handler = Handler{Svc: *svc}
+		handler = Handler{Svc: svc}
 	)
 
+	mux.HandleFunc("/login", handler.Authenticate)
 	mux.HandleFunc("/user", handler.AddUser)
-
-	return mux
 }

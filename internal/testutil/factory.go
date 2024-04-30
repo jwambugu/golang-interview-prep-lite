@@ -4,7 +4,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/binary"
 	"github.com/jaswdr/faker"
-	"github.com/matthewjamesboyle/golang-interview-prep/internal/user"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/model"
 	"math/rand"
 )
 
@@ -17,10 +17,10 @@ func Seed() int64 {
 	return int64(binary.LittleEndian.Uint64(b[:]))
 }
 
-func NewUser() *user.User {
+func NewUser() *model.User {
 	f := faker.NewWithSeed(rand.NewSource(Seed()))
 
-	return &user.User{
+	return &model.User{
 		Username: f.Person().FirstName() + f.Numerify("####"),
 		Password: "password",
 	}

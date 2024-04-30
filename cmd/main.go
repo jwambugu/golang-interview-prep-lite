@@ -8,6 +8,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/auth"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/config"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/db"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/user"
@@ -33,17 +34,19 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	svc, err := user.NewService(conn)
+	userRepo := user.NewRepo(conn)
+	jwtManager := auth.NewJwtTokenManager(config.Config.JwtSecret)
+
+	userSvc, err := user.NewService(jwtManager, userRepo)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	h := user.Handler{Svc: *svc}
-
-	http.HandleFunc("/user", h.AddUser)
+	mux := http.NewServeMux()
+	user.Routes(mux, userSvc)
 
 	log.Println("starting http server")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
 func runMigrations(db *sql.DB) error {
