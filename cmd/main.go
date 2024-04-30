@@ -2,59 +2,70 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
-
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/auth"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/config"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/db"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/user"
 	"log"
 	"net/http"
 )
 
 func main() {
+	if err := config.Load(".env"); err != nil {
+		log.Fatalln(err)
+	}
 
-	runMigrations()
+	conn, err := db.NewConnection(config.Config.DbDSN)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-	svc, err := user.NewService("admin", "admin")
+	defer func(conn *sql.DB) {
+		_ = conn.Close()
+	}(conn)
+
+	if err = runMigrations(conn); err != nil {
+		log.Fatalln(err)
+	}
+
+	userRepo := user.NewRepo(conn)
+	jwtManager := auth.NewJwtTokenManager(config.Config.JwtSecret)
+
+	userSvc, err := user.NewService(jwtManager, userRepo)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	h := user.Handler{Svc: *svc}
+	userHandler := user.NewHandler(jwtManager, userSvc, userRepo)
+	mux := http.NewServeMux()
 
-	http.HandleFunc("/user", h.AddUser)
+	userHandler.Routes(mux)
 
 	log.Println("starting http server")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
-func runMigrations() {
-	// Database connection string
-	dbURL := "postgres://admin:admin@localhost/test_repo?sslmode=disable"
-
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	// Create a new instance of the PostgreSQL driver for migrate
+func runMigrations(db *sql.DB) error {
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("create postgres: %v", err)
 	}
 
 	m, err := migrate.NewWithDatabaseInstance("file://internal/migrations", "postgres", driver)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("create migrate: %v", err)
 	}
 
-	err = m.Up()
-	if err != nil && err != migrate.ErrNoChange {
-		log.Fatal(err)
+	if err = m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migrate up: %v", err)
 	}
 
-	fmt.Println("Database migration complete.")
+	log.Println("Database migration complete.")
+	return nil
 }

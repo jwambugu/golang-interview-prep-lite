@@ -1,43 +1,60 @@
 package user
 
 import (
-	"database/sql"
-	"errors"
+	"context"
 	"fmt"
 	_ "github.com/lib/pq"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/auth"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/model"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/util"
+	"time"
 )
 
+type Service interface {
+	Authenticate(ctx context.Context, username string, password string) (*AuthenticateResp, error)
+	Create(ctx context.Context, u *model.User) error
+}
+
 type service struct {
-	dbUser     string
-	dbPassword string
+	jwtManager auth.JwtManager
+	repo       Repo
 }
 
-func NewService(dbUser, dbPassword string) (*service, error) {
-	if dbUser == "" {
-		return nil, errors.New("dbUser was empty")
-	}
-	return &service{dbUser: dbUser, dbPassword: dbPassword}, nil
-}
-
-type User struct {
-	Name     string
-	Password string
-}
-
-func (s *service) AddUser(u User) (string, error) {
-	db, err := sql.Open("postgres", "postgres://admin:admin@localhost/test_repo?sslmode=disable")
+func (s *service) Authenticate(ctx context.Context, username string, password string) (*AuthenticateResp, error) {
+	user, err := s.repo.Authenticate(ctx, username, password)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	defer db.Close()
 
-	var id string
-	q := "INSERT INTO users (username, password) VALUES ('" + u.Name + "', '" + u.Password + "') RETURNING id"
-
-	err = db.QueryRow(q).Scan(&id)
+	accessToken, err := s.jwtManager.Generate(time.Hour, user)
 	if err != nil {
-		return "", fmt.Errorf("failed to insert: %w", err)
+		return nil, err
 	}
 
-	return id, nil
+	return &AuthenticateResp{
+		AccessToken: accessToken,
+		User:        user,
+	}, nil
+}
+
+func (s *service) Create(ctx context.Context, u *model.User) error {
+	hashedPassword, err := util.HashString(u.Password)
+	if err != nil {
+		return fmt.Errorf("hash password: %v", err)
+	}
+
+	u.Password = hashedPassword
+
+	if err = s.repo.Create(ctx, u); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func NewService(jwtManager auth.JwtManager, repo Repo) (Service, error) {
+	return &service{
+		jwtManager: jwtManager,
+		repo:       repo,
+	}, nil
 }
