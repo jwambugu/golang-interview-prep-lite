@@ -42,8 +42,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	userHandler := user.NewHandler(jwtManager, userSvc, userRepo)
 	mux := http.NewServeMux()
-	user.Routes(mux, userSvc)
+
+	userHandler.Routes(mux)
 
 	log.Println("starting http server")
 	log.Fatal(http.ListenAndServe(":8080", mux))

@@ -54,6 +54,9 @@ func (j *jwtToken) Validate(accessToken string) (*Claims, error) {
 	var claims Claims
 
 	token, err := jwt.ParseWithClaims(accessToken, &claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("invalid signing method: %v", token.Header["alg"])
+		}
 		return j.secret, nil
 	})
 

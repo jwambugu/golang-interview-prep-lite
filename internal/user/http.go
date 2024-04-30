@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/matthewjamesboyle/golang-interview-prep/internal/auth"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/model"
 	"github.com/matthewjamesboyle/golang-interview-prep/internal/util"
 	"net/http"
 )
 
 type Handler struct {
-	Svc Service
+	svc        Service
+	jwtManager auth.JwtManager
+	repo       Repo
 }
 
 func (h Handler) Authenticate(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +28,7 @@ func (h Handler) Authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.Svc.Authenticate(r.Context(), req.Username, req.Password)
+	resp, err := h.svc.Authenticate(r.Context(), req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrRecordNotFound) {
 			util.JsonErrorResponse(w, http.StatusUnauthorized, err)
@@ -51,7 +54,7 @@ func (h Handler) AddUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Svc.Create(r.Context(), u); err != nil {
+	if err := h.svc.Create(r.Context(), u); err != nil {
 		if errors.Is(err, ErrUsernameExists) {
 			util.JsonErrorResponse(w, http.StatusUnprocessableEntity, err)
 			return
@@ -62,4 +65,12 @@ func (h Handler) AddUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	util.JsonResponse(w, http.StatusCreated, u)
+}
+
+func NewHandler(jwtManager auth.JwtManager, svc Service, repo Repo) *Handler {
+	return &Handler{
+		jwtManager: jwtManager,
+		svc:        svc,
+		repo:       repo,
+	}
 }

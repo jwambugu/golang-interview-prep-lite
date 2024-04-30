@@ -13,6 +13,7 @@ const (
 	_queryCreateUser     = `INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id;`
 	_queryUsernameExists = `SELECT exists(SELECT 1 FROM users WHERE username = $1)`
 	_queryBaseFind       = `SELECT id, username, password FROM users`
+	_queryFindByID       = _queryBaseFind + " WHERE id = $1"
 	_queryFindByUsername = _queryBaseFind + " WHERE username = $1"
 )
 
@@ -24,6 +25,7 @@ var (
 type Repo interface {
 	Authenticate(ctx context.Context, username string, password string) (*model.User, error)
 	Create(ctx context.Context, u *model.User) error
+	FindByID(ctx context.Context, id string) (*model.User, error)
 }
 
 type repo struct {
@@ -67,6 +69,20 @@ func (r *repo) Create(ctx context.Context, u *model.User) error {
 	}
 
 	return nil
+}
+
+func (r *repo) FindByID(ctx context.Context, id string) (*model.User, error) {
+	var user model.User
+
+	err := r.db.QueryRowContext(ctx, _queryFindByID, id).Scan(&user.ID, &user.Username, &user.Password)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, fmt.Errorf("find by username: %v", err)
+	}
+
+	return &user, nil
 }
 
 func NewRepo(db *sql.DB) Repo {
